@@ -84,6 +84,7 @@ export const addExercise = mutation({
     ),
     duration: v.optional(v.number()),
     intensity: v.optional(v.string()),
+    supersetGroupId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -198,6 +199,7 @@ export const updateExercise = mutation({
     ),
     duration: v.optional(v.number()),
     intensity: v.optional(v.string()),
+    supersetGroupId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -241,6 +243,35 @@ export const updateExercise = mutation({
     });
 
     return id;
+  },
+});
+
+export const removeFromSuperset = mutation({
+  args: { id: v.id("exercises") },
+  handler: async (ctx, { id }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const ex = await ctx.db.get(id);
+    if (!ex || ex.userId !== userId) throw new Error("Not allowed");
+    if (!ex.supersetGroupId) return;
+
+    const groupId = ex.supersetGroupId;
+
+    // Remove this one from the group
+    await ctx.db.patch(id, { supersetGroupId: undefined });
+
+    // Find others still in the group
+    const remaining = await ctx.db
+      .query("exercises")
+      .withIndex("by_user_date", (q) => q.eq("userId", userId).eq("date", ex.date))
+      .filter((q) => q.eq(q.field("supersetGroupId"), groupId))
+      .collect();
+
+    // If only one left in the group, convert it back to standalone
+    if (remaining.length === 1) {
+      await ctx.db.patch(remaining[0]._id, { supersetGroupId: undefined });
+    }
   },
 });
 

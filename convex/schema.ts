@@ -32,6 +32,7 @@ export default defineSchema({
     duration: v.optional(v.number()),
     intensity: v.optional(v.string()),
     // computed at write time for fast queries
+    supersetGroupId: v.optional(v.string()),
     totalVolume: v.number(),
     estimatedCalories: v.number(),
     createdAt: v.number(),

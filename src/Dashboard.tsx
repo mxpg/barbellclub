@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -32,6 +32,7 @@ type ExerciseDoc = {
   intensity?: string;
   totalVolume: number;
   estimatedCalories: number;
+  supersetGroupId?: string;
 };
 
 export default function Dashboard() {
@@ -40,12 +41,14 @@ export default function Dashboard() {
   const addExercise = useMutation(api.workouts.addExercise);
   const updateExercise = useMutation(api.workouts.updateExercise);
   const deleteExercise = useMutation(api.workouts.deleteExercise);
+  const removeFromSuperset = useMutation(api.workouts.removeFromSuperset);
 
   const [editingId, setEditingId] = useState<Id<"exercises"> | null>(null);
   const [type, setType] = useState<"strength" | "aerobic">("strength");
   const [numSets, setNumSets] = useState(0);
   const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
   const [toast, setToast] = useState<string | null>(null);
+  const [activeSuperset, setActiveSuperset] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [focus, setFocus] = useState("");
@@ -156,8 +159,9 @@ export default function Dashboard() {
             type: "strength",
             weightUnit,
             sets,
+            supersetGroupId: activeSuperset || undefined,
           });
-          showToast("Exercise logged");
+          showToast(activeSuperset ? "Added to superset" : "Exercise logged");
         }
       } else {
         const dur = Number(duration) || 0;
@@ -181,8 +185,9 @@ export default function Dashboard() {
             type: "aerobic",
             duration: dur,
             intensity: aerobicIntensity,
+            supersetGroupId: activeSuperset || undefined,
           });
-          showToast("Exercise logged");
+          showToast(activeSuperset ? "Added to superset" : "Exercise logged");
         }
       }
       resetForm();
@@ -193,6 +198,82 @@ export default function Dashboard() {
 
   const totalVolume = exercises.reduce((s, e) => s + e.totalVolume, 0);
   const totalCals = exercises.reduce((s, e) => s + e.estimatedCalories, 0);
+
+  // Build superset group order for A/B/C labeling
+  const groupOrder: string[] = [];
+  exercises.forEach((ex) => {
+    if (ex.supersetGroupId && !groupOrder.includes(ex.supersetGroupId)) {
+      groupOrder.push(ex.supersetGroupId);
+    }
+  });
+  const supersetLabel = (gid: string) => String.fromCharCode(65 + groupOrder.indexOf(gid));
+
+  const renderedItems: React.ReactNode[] = [];
+  let i = 0;
+  while (i < exercises.length) {
+    const ex = exercises[i];
+    if (ex.supersetGroupId) {
+      const group = [ex];
+      let j = i + 1;
+      while (j < exercises.length && exercises[j].supersetGroupId === ex.supersetGroupId) {
+        group.push(exercises[j]);
+        j++;
+      }
+      renderedItems.push(
+        <div
+          key={ex.supersetGroupId}
+          style={{
+            border: "2px solid var(--accent)",
+            padding: 14,
+            marginBottom: 14,
+            background: "rgba(255,69,0,0.04)",
+          }}
+        >
+          <div className="ex-meta" style={{ marginBottom: 10, color: "var(--accent)", letterSpacing: "0.18em" }}>
+            SUPERSET {supersetLabel(ex.supersetGroupId)} - {group.length} EXERCISES
+          </div>
+          {group.map((g) => (
+            <ExerciseRow
+              key={g._id}
+              ex={g}
+              isEditing={editingId === g._id}
+              inSuperset
+              onEdit={() => setEditingId(g._id)}
+              onRemoveFromSuperset={async () => {
+                await removeFromSuperset({ id: g._id });
+                showToast("Removed from superset");
+              }}
+              onDelete={async () => {
+                if (confirm("Remove this exercise?")) {
+                  if (editingId === g._id) resetForm();
+                  await deleteExercise({ id: g._id });
+                  showToast("Removed");
+                }
+              }}
+            />
+          ))}
+        </div>
+      );
+      i = j;
+    } else {
+      renderedItems.push(
+        <ExerciseRow
+          key={ex._id}
+          ex={ex}
+          isEditing={editingId === ex._id}
+          onEdit={() => setEditingId(ex._id)}
+          onDelete={async () => {
+            if (confirm("Remove this exercise?")) {
+              if (editingId === ex._id) resetForm();
+              await deleteExercise({ id: ex._id });
+              showToast("Removed");
+            }
+          }}
+        />
+      );
+      i++;
+    }
+  }
 
   return (
     <>
@@ -224,21 +305,7 @@ export default function Dashboard() {
         {exercises.length === 0 && (
           <div className="empty">No exercises logged today. Add one below.</div>
         )}
-        {exercises.map((ex) => (
-          <ExerciseRow
-            key={ex._id}
-            ex={ex}
-            isEditing={editingId === ex._id}
-            onEdit={() => setEditingId(ex._id)}
-            onDelete={async () => {
-              if (confirm("Remove this exercise?")) {
-                if (editingId === ex._id) resetForm();
-                await deleteExercise({ id: ex._id });
-                showToast("Removed");
-              }
-            }}
-          />
-        ))}
+        {renderedItems}
       </div>
 
       <div className="section-title" style={{ marginTop: 48 }} id="exercise-form">
@@ -405,13 +472,44 @@ export default function Dashboard() {
           </div>
         )}
 
+        {!editingId && activeSuperset && (
+          <div className="ex-meta" style={{ marginTop: 16, color: "var(--accent)" }}>
+            NEXT EXERCISE WILL BE ADDED TO CURRENT SUPERSET
+          </div>
+        )}
+
         <div style={{ marginTop: 24, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button type="submit" className="btn-primary" style={{ flex: 1, minWidth: 200 }}>
-            {editingId ? "SAVE CHANGES" : "+ ADD EXERCISE"}
+            {editingId
+              ? "SAVE CHANGES"
+              : activeSuperset
+              ? "+ ADD TO SUPERSET"
+              : "+ ADD EXERCISE"}
           </button>
           {editingId && (
             <button type="button" className="btn-ghost" onClick={resetForm}>
               Cancel
+            </button>
+          )}
+          {!editingId && !activeSuperset && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setActiveSuperset(crypto.randomUUID())}
+            >
+              Start Superset
+            </button>
+          )}
+          {!editingId && activeSuperset && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                setActiveSuperset(null);
+                showToast("Superset closed");
+              }}
+            >
+              End Superset
             </button>
           )}
         </div>
@@ -426,13 +524,17 @@ export default function Dashboard() {
 function ExerciseRow({
   ex,
   isEditing,
+  inSuperset,
   onEdit,
   onDelete,
+  onRemoveFromSuperset,
 }: {
   ex: ExerciseDoc;
   isEditing: boolean;
+  inSuperset?: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onRemoveFromSuperset?: () => void;
 }) {
   return (
     <div
@@ -490,7 +592,7 @@ function ExerciseRow({
             <div className="lbl">kcal</div>
           </>
         )}
-        <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button
             onClick={onEdit}
             style={{
@@ -507,6 +609,24 @@ function ExerciseRow({
           >
             Edit
           </button>
+          {inSuperset && onRemoveFromSuperset && (
+            <button
+              onClick={onRemoveFromSuperset}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--muted)",
+                cursor: "pointer",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                padding: "4px 8px",
+              }}
+            >
+              Unlink
+            </button>
+          )}
           <button
             className="ex-delete"
             onClick={onDelete}
