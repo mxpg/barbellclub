@@ -71,8 +71,10 @@ export default function Dashboard() {
         });
       }
 
-      e.currentTarget.reset();
+      const form = e.currentTarget;
+      if (form) form.reset();
       setNumSets(0);
+      setType("strength");
       showToast("Exercise logged");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error");
