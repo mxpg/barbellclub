@@ -510,3 +510,149 @@ select {
 .toast.show { transform: translateX(-50%) translateY(0); }
 
 .hidden { display: none !important; }
+
+/* ============ MOBILE OPTIMIZATIONS ============ */
+
+/* Prevent iOS auto-zoom on input focus (anything under 16px triggers it) */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Tighter wrap padding */
+  .wrap {
+    padding: 20px 16px 100px;
+  }
+
+  /* Header gets smaller and stacks date below brand */
+  .app-header {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .tagline {
+    text-align: left;
+  }
+
+  /* Bigger tap targets for nav */
+  .nav-tabs {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-tabs button {
+    padding: 14px 16px;
+    font-size: 18px;
+  }
+
+  /* Smaller section titles */
+  .section-title {
+    font-size: 26px;
+  }
+
+  /* Cards: less padding so content has more room */
+  .card {
+    padding: 20px 16px;
+  }
+
+  /* Stat values shrink so 5-digit volumes don't wrap */
+  .stat .val {
+    font-size: 48px;
+  }
+  .stat {
+    padding: 22px 18px;
+  }
+
+  /* Sets table on mobile: each row becomes a card */
+  .sets-table thead {
+    display: none;
+  }
+  .sets-table tr {
+    display: grid;
+    grid-template-columns: 50px 1fr 1fr 1fr;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .sets-table td {
+    padding: 4px;
+  }
+  .sets-table input,
+  .sets-table select {
+    padding: 10px 8px;
+    font-size: 16px !important;
+  }
+
+  /* Exercise items: stack the stats below content instead of squeezing right */
+  .exercise-item {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .ex-stats {
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .ex-stats .big {
+    font-size: 32px;
+  }
+  .ex-delete {
+    margin-left: auto;
+    margin-top: 0;
+  }
+
+  /* History rows: tighter on mobile */
+  .history-head {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+  .history-totals {
+    text-align: left;
+  }
+
+  /* Type toggle: bigger tap zones */
+  .type-toggle button {
+    padding: 16px;
+    font-size: 20px;
+  }
+
+  /* Primary button: comfortable to thumb */
+  .btn-primary {
+    padding: 18px 24px;
+    font-size: 22px;
+  }
+
+  /* PR cards stack to one column at narrow widths anyway, but tighten */
+  .pr-card {
+    padding: 16px;
+  }
+}
+
+/* Active tap state — gives feedback on touch */
+@media (hover: none) {
+  .btn-primary:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+  .btn-ghost:active,
+  .nav-tabs button:active,
+  .type-toggle button:active {
+    opacity: 0.6;
+  }
+  .exercise-item:active,
+  .history-head:active {
+    background: var(--line);
+  }
+}
