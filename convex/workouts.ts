@@ -177,3 +177,68 @@ export const deleteExercise = mutation({
     await ctx.db.delete(id);
   },
 });
+
+export const updateExercise = mutation({
+  args: {
+    id: v.id("exercises"),
+    name: v.string(),
+    focus: v.optional(v.string()),
+    type: v.union(v.literal("strength"), v.literal("aerobic")),
+    weightUnit: v.optional(v.string()),
+    sets: v.optional(
+      v.array(
+        v.object({
+          reps: v.number(),
+          weight: v.number(),
+          intensity: v.optional(v.string()),
+        })
+      )
+    ),
+    duration: v.optional(v.number()),
+    intensity: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Exercise not found");
+    if (existing.userId !== userId) throw new Error("Not allowed");
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const totalVolume = args.type === "strength" ? calcVolume(args.sets) : 0;
+
+    let estimatedCalories = 0;
+    if (profile) {
+      const kcalMin = bmrKcalPerMin(profile);
+      if (args.type === "aerobic") {
+        const met = AEROBIC_MET[args.intensity || "moderate"] || 6.0;
+        estimatedCalories = Math.round(kcalMin * met * (args.duration || 0));
+      } else {
+        const sets = args.sets || [];
+        const order = ["low", "moderate", "high", "max"];
+        let topIdx = 0;
+        sets.forEach((s) => {
+          const idx = order.indexOf(s.intensity || "");
+          if (idx > topIdx) topIdx = idx;
+        });
+        const met = STRENGTH_MET[order[topIdx]] || 5.0;
+        estimatedCalories = Math.round(kcalMin * met * sets.length * 3);
+      }
+    }
+
+    const { id, ...updateFields } = args;
+    await ctx.db.patch(id, {
+      ...updateFields,
+      totalVolume,
+      estimatedCalories,
+    });
+
+    return id;
+  },
+});
+

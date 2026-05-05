@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -21,61 +21,160 @@ function fmtDateLong(key: string) {
   });
 }
 
+type ExerciseDoc = {
+  _id: Id<"exercises">;
+  name: string;
+  focus?: string;
+  type: "strength" | "aerobic";
+  weightUnit?: string;
+  sets?: { reps: number; weight: number; intensity?: string }[];
+  duration?: number;
+  intensity?: string;
+  totalVolume: number;
+  estimatedCalories: number;
+};
+
 export default function Dashboard() {
   const date = todayKey();
   const exercises = useQuery(api.workouts.getByDate, { date }) || [];
   const addExercise = useMutation(api.workouts.addExercise);
+  const updateExercise = useMutation(api.workouts.updateExercise);
   const deleteExercise = useMutation(api.workouts.deleteExercise);
 
+  const [editingId, setEditingId] = useState<Id<"exercises"> | null>(null);
   const [type, setType] = useState<"strength" | "aerobic">("strength");
   const [numSets, setNumSets] = useState(0);
   const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
   const [toast, setToast] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [focus, setFocus] = useState("");
+  const [duration, setDuration] = useState<string>("");
+  const [aerobicIntensity, setAerobicIntensity] = useState("");
+  const [setsData, setSetsData] = useState<{ reps: string; weight: string; intensity: string }[]>([]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const ex = exercises.find((e) => e._id === editingId);
+    if (!ex) return;
+    setName(ex.name);
+    setFocus(ex.focus || "");
+    setType(ex.type);
+    if (ex.type === "aerobic") {
+      setDuration(String(ex.duration || ""));
+      setAerobicIntensity(ex.intensity || "");
+    } else {
+      setWeightUnit((ex.weightUnit as "lbs" | "kg") || "lbs");
+      setNumSets(ex.sets?.length || 0);
+      setSetsData(
+        (ex.sets || []).map((s) => ({
+          reps: String(s.reps || ""),
+          weight: String(s.weight || ""),
+          intensity: s.intensity || "",
+        }))
+      );
+    }
+    setTimeout(() => {
+      document.getElementById("exercise-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, [editingId, exercises]);
+
+  function handleNumSetsChange(n: number) {
+    setNumSets(n);
+    setSetsData((prev) => {
+      const next = [...prev];
+      while (next.length < n) next.push({ reps: "", weight: "", intensity: "" });
+      next.length = n;
+      return next;
+    });
+  }
+
+  function updateSet(idx: number, field: "reps" | "weight" | "intensity", val: string) {
+    setSetsData((prev) => {
+      const next = [...prev];
+      if (!next[idx]) next[idx] = { reps: "", weight: "", intensity: "" };
+      next[idx] = { ...next[idx], [field]: val };
+      return next;
+    });
+  }
 
   function showToast(m: string) {
     setToast(m);
     setTimeout(() => setToast(null), 2200);
   }
 
+  function resetForm() {
+    setEditingId(null);
+    setName("");
+    setFocus("");
+    setType("strength");
+    setNumSets(0);
+    setSetsData([]);
+    setDuration("");
+    setAerobicIntensity("");
+    setWeightUnit("lbs");
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const name = String(fd.get("name") || "").trim();
-    const focus = String(fd.get("focus") || "");
-
-    if (!name) return showToast("Enter exercise name");
+    if (!name.trim()) return showToast("Enter exercise name");
 
     try {
       if (type === "strength") {
         if (numSets === 0) return showToast("Select number of sets");
-        const sets = [];
-        for (let i = 1; i <= numSets; i++) {
-          sets.push({
-            reps: Number(fd.get(`reps_${i}`)) || 0,
-            weight: Number(fd.get(`weight_${i}`)) || 0,
-            intensity: String(fd.get(`intensity_${i}`) || "") || undefined,
+        const sets = setsData.slice(0, numSets).map((s) => ({
+          reps: Number(s.reps) || 0,
+          weight: Number(s.weight) || 0,
+          intensity: s.intensity || undefined,
+        }));
+        if (editingId) {
+          await updateExercise({
+            id: editingId,
+            name: name.trim(),
+            focus: focus || undefined,
+            type: "strength",
+            weightUnit,
+            sets,
           });
+          showToast("Changes saved");
+        } else {
+          await addExercise({
+            date,
+            name: name.trim(),
+            focus: focus || undefined,
+            type: "strength",
+            weightUnit,
+            sets,
+          });
+          showToast("Exercise logged");
         }
-        await addExercise({
-          date, name, focus: focus || undefined, type: "strength",
-          weightUnit, sets,
-        });
       } else {
-        const duration = Number(fd.get("duration")) || 0;
-        const intensity = String(fd.get("intensity") || "");
-        if (!duration) return showToast("Enter duration");
-        if (!intensity) return showToast("Select intensity");
-        await addExercise({
-          date, name, focus: focus || undefined, type: "aerobic",
-          duration, intensity,
-        });
+        const dur = Number(duration) || 0;
+        if (!dur) return showToast("Enter duration");
+        if (!aerobicIntensity) return showToast("Select intensity");
+        if (editingId) {
+          await updateExercise({
+            id: editingId,
+            name: name.trim(),
+            focus: focus || undefined,
+            type: "aerobic",
+            duration: dur,
+            intensity: aerobicIntensity,
+          });
+          showToast("Changes saved");
+        } else {
+          await addExercise({
+            date,
+            name: name.trim(),
+            focus: focus || undefined,
+            type: "aerobic",
+            duration: dur,
+            intensity: aerobicIntensity,
+          });
+          showToast("Exercise logged");
+        }
       }
-
-      const form = e.currentTarget;
-      if (form) form.reset();
-      setNumSets(0);
-      setType("strength");
-      showToast("Exercise logged");
+      resetForm();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error");
     }
@@ -118,8 +217,11 @@ export default function Dashboard() {
           <ExerciseRow
             key={ex._id}
             ex={ex}
+            isEditing={editingId === ex._id}
+            onEdit={() => setEditingId(ex._id)}
             onDelete={async () => {
               if (confirm("Remove this exercise?")) {
+                if (editingId === ex._id) resetForm();
                 await deleteExercise({ id: ex._id });
                 showToast("Removed");
               }
@@ -128,16 +230,23 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="section-title" style={{ marginTop: 48 }}>
-        <span className="section-num">02</span> LOG NEW EXERCISE
+      <div className="section-title" style={{ marginTop: 48 }} id="exercise-form">
+        <span className="section-num">02</span>
+        {editingId ? " EDIT EXERCISE" : " LOG NEW EXERCISE"}
       </div>
 
       <form className="card" onSubmit={handleSubmit}>
+        {editingId && (
+          <div className="ex-meta" style={{ marginBottom: 16, color: "var(--accent)" }}>
+            EDITING - CHANGES WILL OVERWRITE THIS EXERCISE
+          </div>
+        )}
+
         <div className="row cols-2">
           <div>
             <label>Daily Focus</label>
-            <select name="focus">
-              <option value="">— Select focus —</option>
+            <select value={focus} onChange={(e) => setFocus(e.target.value)}>
+              <option value="">- Select focus -</option>
               {FOCUS_OPTIONS.map((f) => <option key={f}>{f}</option>)}
             </select>
           </div>
@@ -161,7 +270,12 @@ export default function Dashboard() {
         <div className="row">
           <div>
             <label>Exercise Name</label>
-            <input name="name" type="text" placeholder="e.g. Bench Press, Treadmill" />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Bench Press, Treadmill"
+            />
           </div>
         </div>
 
@@ -172,9 +286,9 @@ export default function Dashboard() {
                 <label>Number of Sets</label>
                 <select
                   value={numSets}
-                  onChange={(e) => setNumSets(Number(e.target.value))}
+                  onChange={(e) => handleNumSetsChange(Number(e.target.value))}
                 >
-                  <option value={0}>— Select —</option>
+                  <option value={0}>- Select -</option>
                   {[1,2,3,4,5,6,7,8,9,10].map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
@@ -203,14 +317,34 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: numSets }, (_, i) => i + 1).map((i) => (
+                  {Array.from({ length: numSets }, (_, i) => i).map((i) => (
                     <tr key={i}>
-                      <td className="set-num">{i}</td>
-                      <td><input name={`reps_${i}`} type="number" min={0} placeholder="reps" /></td>
-                      <td><input name={`weight_${i}`} type="number" min={0} step={2.5} placeholder="weight" /></td>
+                      <td className="set-num">{i+1}</td>
                       <td>
-                        <select name={`intensity_${i}`}>
-                          <option value="">—</option>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="reps"
+                          value={setsData[i]?.reps || ""}
+                          onChange={(e) => updateSet(i, "reps", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step={2.5}
+                          placeholder="weight"
+                          value={setsData[i]?.weight || ""}
+                          onChange={(e) => updateSet(i, "weight", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={setsData[i]?.intensity || ""}
+                          onChange={(e) => updateSet(i, "intensity", e.target.value)}
+                        >
+                          <option value="">-</option>
                           <option value="low">Low</option>
                           <option value="moderate">Moderate</option>
                           <option value="high">High</option>
@@ -227,12 +361,21 @@ export default function Dashboard() {
           <div className="row cols-2">
             <div>
               <label>Duration (minutes)</label>
-              <input name="duration" type="number" min={1} placeholder="30" />
+              <input
+                type="number"
+                min={1}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="30"
+              />
             </div>
             <div>
               <label>Intensity</label>
-              <select name="intensity">
-                <option value="">— Select —</option>
+              <select
+                value={aerobicIntensity}
+                onChange={(e) => setAerobicIntensity(e.target.value)}
+              >
+                <option value="">- Select -</option>
                 <option value="low">Low</option>
                 <option value="moderate">Moderate</option>
                 <option value="high">High</option>
@@ -242,8 +385,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div style={{ marginTop: 24 }}>
-          <button type="submit" className="btn-primary">＋ ADD EXERCISE</button>
+        <div style={{ marginTop: 24, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="submit" className="btn-primary" style={{ flex: 1, minWidth: 200 }}>
+            {editingId ? "SAVE CHANGES" : "+ ADD EXERCISE"}
+          </button>
+          {editingId && (
+            <button type="button" className="btn-ghost" onClick={resetForm}>
+              Cancel
+            </button>
+          )}
         </div>
       </form>
 
@@ -252,37 +402,48 @@ export default function Dashboard() {
   );
 }
 
+
 function ExerciseRow({
   ex,
+  isEditing,
+  onEdit,
   onDelete,
 }: {
-  ex: {
-    _id: Id<"exercises">;
-    name: string;
-    focus?: string;
-    type: "strength" | "aerobic";
-    weightUnit?: string;
-    sets?: { reps: number; weight: number; intensity?: string }[];
-    duration?: number;
-    intensity?: string;
-    totalVolume: number;
-    estimatedCalories: number;
-  };
+  ex: ExerciseDoc;
+  isEditing: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   return (
-    <div className="exercise-item">
+    <div
+      className="exercise-item"
+      style={isEditing ? { borderLeftColor: "var(--accent-2)", background: "rgba(212,255,0,0.05)" } : undefined}
+    >
       <div>
-        <div className="ex-head">{ex.name}</div>
+        <div className="ex-head">
+          {ex.name}
+          {isEditing && (
+            <span style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10,
+              color: "var(--accent-2)",
+              marginLeft: 10,
+              letterSpacing: "0.15em",
+              verticalAlign: "middle",
+            }}>
+              EDITING
+            </span>
+          )}
+        </div>
         <div className="ex-meta">
-          {ex.type === "strength" ? "STRENGTH" : "AEROBIC"} · {ex.focus || "No focus"}
+          {ex.type === "strength" ? "STRENGTH" : "AEROBIC"} - {ex.focus || "No focus"}
         </div>
         <div className="ex-detail">
           {ex.type === "strength" && ex.sets ? (
             ex.sets.map((s, i) => (
               <span key={i} className="pill">
-                SET {i + 1}: {s.reps}× {s.weight}{ex.weightUnit || "lbs"}
-                {s.intensity ? ` · ${s.intensity}` : ""}
+                SET {i + 1}: {s.reps}x {s.weight}{ex.weightUnit || "lbs"}
+                {s.intensity ? ` - ${s.intensity}` : ""}
               </span>
             ))
           ) : (
@@ -308,8 +469,33 @@ function ExerciseRow({
             <div className="lbl">kcal</div>
           </>
         )}
-        <button className="ex-delete" onClick={onDelete}>Remove</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+          <button
+            onClick={onEdit}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--accent-2)",
+              cursor: "pointer",
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: "0.15em",
+              padding: "4px 8px",
+            }}
+          >
+            Edit
+          </button>
+          <button
+            className="ex-delete"
+            onClick={onDelete}
+            style={{ marginTop: 0 }}
+          >
+            Remove
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
