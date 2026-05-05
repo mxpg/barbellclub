@@ -26,6 +26,7 @@ export default defineSchema({
       reps: v.number(),
       weight: v.number(),
       intensity: v.optional(v.string()),
+      isDropset: v.optional(v.boolean()),
     }))),
     // aerobic
     duration: v.optional(v.number()),

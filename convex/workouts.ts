@@ -78,6 +78,7 @@ export const addExercise = mutation({
           reps: v.number(),
           weight: v.number(),
           intensity: v.optional(v.string()),
+          isDropset: v.optional(v.boolean()),
         })
       )
     ),
@@ -191,6 +192,7 @@ export const updateExercise = mutation({
           reps: v.number(),
           weight: v.number(),
           intensity: v.optional(v.string()),
+          isDropset: v.optional(v.boolean()),
         })
       )
     ),

@@ -27,7 +27,7 @@ type ExerciseDoc = {
   focus?: string;
   type: "strength" | "aerobic";
   weightUnit?: string;
-  sets?: { reps: number; weight: number; intensity?: string }[];
+  sets?: { reps: number; weight: number; intensity?: string; isDropset?: boolean }[];
   duration?: number;
   intensity?: string;
   totalVolume: number;
@@ -51,7 +51,7 @@ export default function Dashboard() {
   const [focus, setFocus] = useState("");
   const [duration, setDuration] = useState<string>("");
   const [aerobicIntensity, setAerobicIntensity] = useState("");
-  const [setsData, setSetsData] = useState<{ reps: string; weight: string; intensity: string }[]>([]);
+  const [setsData, setSetsData] = useState<{ reps: string; weight: string; intensity: string; isDropset: boolean }[]>([]);
 
   useEffect(() => {
     if (!editingId) return;
@@ -71,6 +71,7 @@ export default function Dashboard() {
           reps: String(s.reps || ""),
           weight: String(s.weight || ""),
           intensity: s.intensity || "",
+          isDropset: !!s.isDropset,
         }))
       );
     }
@@ -83,7 +84,7 @@ export default function Dashboard() {
     setNumSets(n);
     setSetsData((prev) => {
       const next = [...prev];
-      while (next.length < n) next.push({ reps: "", weight: "", intensity: "" });
+      while (next.length < n) next.push({ reps: "", weight: "", intensity: "", isDropset: false });
       next.length = n;
       return next;
     });
@@ -92,8 +93,17 @@ export default function Dashboard() {
   function updateSet(idx: number, field: "reps" | "weight" | "intensity", val: string) {
     setSetsData((prev) => {
       const next = [...prev];
-      if (!next[idx]) next[idx] = { reps: "", weight: "", intensity: "" };
+      if (!next[idx]) next[idx] = { reps: "", weight: "", intensity: "", isDropset: false };
       next[idx] = { ...next[idx], [field]: val };
+      return next;
+    });
+  }
+
+  function toggleDropset(idx: number) {
+    setSetsData((prev) => {
+      const next = [...prev];
+      if (!next[idx]) next[idx] = { reps: "", weight: "", intensity: "", isDropset: false };
+      next[idx] = { ...next[idx], isDropset: !next[idx].isDropset };
       return next;
     });
   }
@@ -126,6 +136,7 @@ export default function Dashboard() {
           reps: Number(s.reps) || 0,
           weight: Number(s.weight) || 0,
           intensity: s.intensity || undefined,
+          isDropset: s.isDropset || undefined,
         }));
         if (editingId) {
           await updateExercise({
@@ -314,6 +325,7 @@ export default function Dashboard() {
                     <th>Reps</th>
                     <th>Weight ({weightUnit})</th>
                     <th>Intensity</th>
+                    <th>Drop</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -350,6 +362,14 @@ export default function Dashboard() {
                           <option value="high">High</option>
                           <option value="max">Max</option>
                         </select>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={!!setsData[i]?.isDropset}
+                          onChange={() => toggleDropset(i)}
+                          style={{ width: 22, height: 22, accentColor: "var(--accent)", cursor: "pointer" }}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -441,9 +461,10 @@ function ExerciseRow({
         <div className="ex-detail">
           {ex.type === "strength" && ex.sets ? (
             ex.sets.map((s, i) => (
-              <span key={i} className="pill">
+              <span key={i} className="pill" style={s.isDropset ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
                 SET {i + 1}: {s.reps}x {s.weight}{ex.weightUnit || "lbs"}
                 {s.intensity ? ` - ${s.intensity}` : ""}
+                {s.isDropset ? " - DROPSET" : ""}
               </span>
             ))
           ) : (
