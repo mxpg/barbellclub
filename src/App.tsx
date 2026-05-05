@@ -9,8 +9,9 @@ import PRs from "./PRs";
 import Charts from "./Charts";
 import Profile from "./Profile";
 import Programs from "./Programs";
+import Calculators from "./Calculators";
 
-type Tab = "today" | "history" | "prs" | "charts" | "programs" | "profile";
+type Tab = "today" | "history" | "prs" | "charts" | "programs" | "calculators" | "profile";
 
 export default function App() {
   return (
@@ -71,6 +72,7 @@ function Main() {
         <button className={tab === "prs" ? "active" : ""} onClick={() => setTab("prs")}>PRs</button>
         <button className={tab === "charts" ? "active" : ""} onClick={() => setTab("charts")}>Progress</button>
         <button className={tab === "programs" ? "active" : ""} onClick={() => setTab("programs")}>Programs</button>
+        <button className={tab === "calculators" ? "active" : ""} onClick={() => setTab("calculators")}>Tools</button>
         <button className={tab === "profile" ? "active" : ""} onClick={() => setTab("profile")}>Profile</button>
         <div className="spacer"></div>
         <button className="signout" onClick={() => void signOut()}>Sign out</button>
@@ -81,6 +83,7 @@ function Main() {
       {tab === "prs" && <PRs />}
       {tab === "charts" && <Charts />}
       {tab === "programs" && <Programs />}
+      {tab === "calculators" && <Calculators />}
       {tab === "profile" && <Profile />}
     </div>
   );
